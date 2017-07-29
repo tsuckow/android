@@ -7,12 +7,13 @@ allprojects {
 
 buildscript {
     repositories {
+        maven { url '/home/tsuckow/Projects/gradle/out/repo' }
         jcenter()
         mavenCentral()
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:2.2.2'
+        classpath 'com.android.tools.build:gradle:2.3.3'
         classpath 'org.ajoberstar:gradle-git:0.2.3'
     }
 }
@@ -38,11 +39,15 @@ task buildCjdns(type: Exec) {
     commandLine file("cjdns-src/android_do")
 }
 
-task copyNativeArtifacts(type: Copy) {
-    from 'cjdns-src/build_android/out/*'
-    into 'src/main/assets/'
+task copyNativeArtifacts {
+    copy {
+        from 'cjdns-src/build_android/out/'
+        //into 'src/main/assets/'
+        into buildDir.absolutePath + '/intermediates/assets/debug/'
+    }
 }
 
+apply plugin: CustomNDK
 apply plugin: 'com.android.application'
 apply plugin: 'checkstyle'
 
@@ -55,13 +60,21 @@ android {
         targetSdkVersion 25
         versionCode 1
         versionName "1.0.0-SNAPSHOT"
-    }
 
+       externalNativeBuild {
+            ndkBuild {
+                cppFlags ""
+
+                //abiFilters "armeabi-v7a","arm64-v8a","x86","x86_64","mips","mips64"
+            }
+        }
+    }
+/*
     sourceSets.main {
         jni.srcDirs = []
         jniLibs.srcDir 'src/main/libs'
     }
-
+*/
     signingConfigs {
         release
     }
@@ -75,6 +88,22 @@ android {
     lintOptions {
         disable 'InvalidPackage'
     }
+
+    externalNativeBuild {
+        ndkBuild {
+            path "src/main/jni/Android.mk"
+        }
+    }
+
+    /*splits {
+        abi {
+            enable true
+            //Do them all individually.
+            //reset()
+            //include "armeabi-v7a","arm64-v8a","x86","x86_64","mips","mips64" //select ABIs to build APKs for
+            //universalApk true //generate an additional APK that contains all the ABIs
+        }
+    }*/
 }
 
 afterEvaluate {
@@ -82,6 +111,8 @@ afterEvaluate {
         android.applicationVariants.all { variant ->
             variant.javaCompiler.dependsOn(cloneCjdns)
         }
+    } else {
+        println "COMPILE_CJDNS_NATIVE_ARTIFACTS is false, skipping build"
     }
 }
 
@@ -121,3 +152,93 @@ if (project.hasProperty('storeFile')) {
 if (project.hasProperty('storePassword')) {
     android.signingConfigs.release.storePassword = storePassword
 }
+
+class CustomNDK implements Plugin<Project> {
+    void apply(Project project) {
+        /*project.extensions.create("greeting", GreetingPluginExtension)
+        project.task('hello') {
+            doLast {
+                println "${project.greeting.message} from ${project.greeting.greeter}"
+            }
+        }*/
+    }
+}
+
+android.applicationVariants.all { variant ->
+    task ("myCustomTaskConfig${variant.name.capitalize()}") {
+        println "*** CONFIG ***"
+        println variant.name.capitalize() + android.ndkDirectory
+    }
+    task ("myCustomTask${variant.name.capitalize()}") << {
+        println "*** TEST ***"
+        println variant.name.capitalize()
+    }
+}
+
+import com.android.build.gradle.internal.ndk.NdkHandler
+
+afterEvaluate {
+    def filtered = ['class', 'active']
+
+    /*println "Android: " + android.properties
+            .sort{it.key}
+            .collect{it}
+            .findAll{!filtered.contains(it.key)}
+            .join('\n')*/
+
+    println buildDir
+
+    def handler = new NdkHandler(project.getRootDir(),
+            project.getExtensions().getByName("android").getCompileSdkVersion(),
+            "gcc",
+            "")
+    println "ABIS: "
+    handler.getSupportedAbis().each { abi ->
+        println abi.name + handler.getCppCompiler(abi)
+    }
+}
+
+afterEvaluate {
+    android.applicationVariants.all { variant ->
+        variant.outputs.each { output ->
+            println "Output: " + output.getFilter(com.android.build.OutputFile.ABI)
+
+            /*def filtered = ['class', 'active']
+
+            println output.properties
+                    .sort{it.key}
+                    .collect{it}
+                    .findAll{!filtered.contains(it.key)}
+                    .join('\n')*/
+
+            task ("my4CustomTaskConfig${variant.name.capitalize()}${output.getFilter(com.android.build.OutputFile.ABI)}") << {
+                println "^^ ASSEMBLE " + output.getFilter(com.android.build.OutputFile.ABI)
+            }
+            output.assemble.finalizedBy("my4CustomTaskConfig${variant.name.capitalize()}${output.getFilter(com.android.build.OutputFile.ABI)}")
+        }
+
+        task ("my3CustomTaskConfig${variant.name.capitalize()}") << {
+            println "### CONFIG ***"
+            println variant.name.capitalize()
+            def filtered = ['class', 'active']
+
+            println variant.properties
+                    .sort{it.key}
+                    .collect{it}
+                    .findAll{!filtered.contains(it.key)}
+                    .join('\n')
+        }
+        variant.javaCompiler.dependsOn("my3CustomTaskConfig${variant.name.capitalize()}")
+
+        task ("my2CustomTaskConfig${variant.name.capitalize()}") {
+            println "%%% CONFIG ***"
+            println variant.name.capitalize()
+        }
+        task ("my2CustomTask${variant.name.capitalize()}") << {
+            println "%%% TEST ***"
+            println variant.name.capitalize()
+        }
+    }
+}
+
+
