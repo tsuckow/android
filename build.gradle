@@ -24,6 +24,13 @@ ext {
     supportVersion = '25.0.1'
 }
 
+def projectAbiFilters = ["armeabi","armeabi-v7a","arm64-v8a","x86","x86_64"]
+/*,"mips" */ //No dynamic linking
+/*,"mips64" */ //Broken tuntap adapter
+//interface/tuntap/TUNInterface_linux.c:67:23: error: overflow in implicit constant conversion [-Werror=overflow]
+//if (ioctl(fileno, TUNSETIFF, &ifRequest) < 0) {
+//                  ^
+
 import org.ajoberstar.gradle.git.tasks.GitClone
 
 apply plugin: 'com.moowork.node'
@@ -54,16 +61,17 @@ task cloneCjdns(type: GitClone) {
     bare = false
     enabled = !destination.exists() // Clone only on first run
 }
-
+/*
 task buildCjdns(type: Exec) {
     workingDir file("cjdns-src")
     commandLine file("cjdns-src/android_do")
 }
-/*
+*/
+
 task buildCjdns {
 
 }
-*/
+
 task copyNativeArtifacts {
     copy {
         from 'cjdns-src/build_android/out/'
@@ -90,7 +98,7 @@ android {
             ndkBuild {
                 cppFlags ""
 
-                //abiFilters "armeabi-v7a","arm64-v8a","x86","x86_64","mips","mips64"
+                abiFilters = projectAbiFilters
             }
         }
     }
@@ -207,31 +215,38 @@ import com.android.build.gradle.internal.ndk.Stl;
 
 afterEvaluate {
     def filtered = ['class', 'active']
-
+/*
     println android.properties
             .sort{it.key}
             .collect{it}
             .findAll{!filtered.contains(it.key)}
             .join(' \n')
-
+*/
     //Internal Class of NDK, may change without notice
     def handler = new NdkHandler(project.getRootDir(),
             project.getExtensions().getByName("android").getCompileSdkVersion(),
             "gcc",
             "")
-    handler.getSupportedAbis().each { abi ->
+
+    android.ext
+
+    println 'Available ABIs: ' + handler.getSupportedAbis().name.toString()
+    def abis = handler.getSupportedAbis().findAll { it.name in projectAbiFilters };
+    println 'Enabled ABIs: ' + abis.name.toString()
+    abis.each { abi ->
         def toolchain = handler.getCCompiler(abi).absolutePath.replaceFirst( /(.*[\/\\]prebuilt[\/\\][^\/\\]+)[\/\\].*/, '$1' )
         def taskName = "buildCjdns${abi.name}"
         def CROSS = handler.getCCompiler(abi).absolutePath.replaceAll('gcc$','')
         def TEMP = System.getProperty("java.io.tmpdir")
         def systemIncludes = handler.getStlNativeToolSpecification(Stl.getById('system'), null, abi).getIncludes().collect({'-I'+it}).join(' ')
         def CFLAGS = "--sysroot=" + handler.getSysroot(abi) + ' ' + systemIncludes
-        def LDFLAGS = ""
-        println 'cflags 2'
-        println CFLAGS
+        def LDFLAGS = "--sysroot=" + handler.getSysroot(abi)
+        //println 'cflags 2'
+        //println CFLAGS
 
         //Determining the paths in the ndk is not easy...
         def tools = handler.getNdkDirectory().absolutePath + handler.getCCompiler(abi).absolutePath.replaceFirst( /.*([\/\\]prebuilt[\/\\][^\/\\]+[\/\\]).*/, '$1' ) + 'bin'
+        /*
         println tools
 
         println  handler.getCCompiler(abi)
@@ -242,21 +257,28 @@ afterEvaluate {
         println handler.getAr(abi)
         println  handler.getCCompiler(abi).absolutePath.replaceAll('gcc$','ranlib')
         println  tools + System.getProperty("path.separator") + "${System.env.PATH}"
+        */
+        //println "Name: " + abi.name
 
 
 //flags -gcc-toolchain /home/tsuckow/Android/Sdk/ndk-bundle/toolchains/x86_64-4.9/prebuilt/linux-x86_64 -target x86_64-none-linux-android -ffunction-sections -funwind-tables -fstack-protector-strong -fPIC -Wno-invalid-command-line-argument -Wno-unused-command-line-argument -no-canonical-prefixes  -g -fno-exceptions -fno-rtti -O0 -UNDEBUG -fno-limit-debug-info  -I/home/tsuckow/Android/Sdk/ndk-bundle/sources/cxx-stl/stlport/stlport -I/home/tsuckow/Android/Sdk/ndk-bundle/sources/cxx-stl//gabi++/include -I/home/tsuckow/Projects/hyperboria-android/src/main/jni     -DANDROID -DTARGET_ARCH_ABI=\"x86_64\" -D__ANDROID_API__=21 -Wa,--noexecstack -Wformat -Werror=format-security  -frtti  --sysroot /home/tsuckow/Android/Sdk/ndk-bundle/sysroot -isystem /home/tsuckow/Android/Sdk/ndk-bundle/sysroot/usr/include/x86_64-linux-android -c
 //LDflags  -gcc-toolchain /home/tsuckow/Android/Sdk/ndk-bundle/toolchains/x86_64-4.9/prebuilt/linux-x86_64 -target x86_64-none-linux-android -no-canonical-prefixes
 
 //LD_FLAGS appears to be missing
-        /*
+
+        //2018-05-01 --sysroot not having effect on Build libuv...
+
         task (taskName, type: NodeTask) {
-            script = file('cjdns-src/node_build/make.js')
+            script = file('make_cjdns.js')
             execOverrides {
                 it.workingDir = 'cjdns-src'
                 it.environment << [
                         CC: handler.getCCompiler(abi),
                         GCC: handler.getCCompiler(abi),
                         CFLAGS: CFLAGS,
+                        //GCC_EXEC_PREFIX: handler.getSysroot(abi),
+                        LIBRARY_PATH: handler.getSysroot(abi),
+                        CPATH: handler.getSysroot(abi) + '/usr/include',
                         LDFLAGS: LDFLAGS,
                         CROSS: CROSS,
                         PLATFORM: "android",
@@ -269,7 +291,7 @@ afterEvaluate {
             }
         }
         buildCjdns.dependsOn(taskName)
-*/
+
     }
 }
 /*
