@@ -7,7 +7,7 @@ allprojects {
 
 buildscript {
     repositories {
-        maven { url '/home/tsuckow/Projects/gradle/out/repo' }
+        maven { url "https://plugins.gradle.org/m2/" }
         jcenter()
         mavenCentral()
     }
@@ -15,6 +15,8 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:2.3.3'
         classpath 'org.ajoberstar:gradle-git:0.2.3'
+        classpath "com.moowork.gradle:gradle-node-plugin:1.1.0"
+        classpath "gradle.plugin.com.jetbrains.python:gradle-python-envs:0.0.12"
     }
 }
 
@@ -23,6 +25,25 @@ ext {
 }
 
 import org.ajoberstar.gradle.git.tasks.GitClone
+
+apply plugin: 'com.moowork.node'
+/*apply plugin: "com.jetbrains.python.envs"
+
+envs {
+    bootstrapDirectory = new File(buildDir, 'pythons')
+    envsDirectory = new File(buildDir, 'envs')
+    minicondaVersion = 'latest'
+    packages = ["pip", "setuptools"]
+
+    conda "python2", "2.7", [], true
+}
+*/
+node {
+    // Version of node to use.
+    version = '6.11.1'
+    // Enabled the automatic download.
+    download = true
+}
 
 task cloneCjdns(type: GitClone) {
     def destination = file("cjdns-src")
@@ -38,7 +59,11 @@ task buildCjdns(type: Exec) {
     workingDir file("cjdns-src")
     commandLine file("cjdns-src/android_do")
 }
+/*
+task buildCjdns {
 
+}
+*/
 task copyNativeArtifacts {
     copy {
         from 'cjdns-src/build_android/out/'
@@ -53,15 +78,15 @@ apply plugin: 'checkstyle'
 
 android {
     buildToolsVersion "25.0.1"
-    compileSdkVersion 25
+    compileSdkVersion 24
 
     defaultConfig {
         minSdkVersion 9
-        targetSdkVersion 25
+        targetSdkVersion 24
         versionCode 1
         versionName "1.0.0-SNAPSHOT"
 
-       externalNativeBuild {
+        externalNativeBuild {
             ndkBuild {
                 cppFlags ""
 
@@ -116,7 +141,9 @@ afterEvaluate {
     }
 }
 
+//cloneCjdns.dependsOn('build_envs')
 cloneCjdns.finalizedBy(buildCjdns)
+//cloneCjdns.finalizedBy(nodeScript)
 buildCjdns.finalizedBy(copyNativeArtifacts)
 
 dependencies {
@@ -163,7 +190,7 @@ class CustomNDK implements Plugin<Project> {
         }*/
     }
 }
-
+/*
 android.applicationVariants.all { variant ->
     task ("myCustomTaskConfig${variant.name.capitalize()}") {
         println "*** CONFIG ***"
@@ -174,42 +201,90 @@ android.applicationVariants.all { variant ->
         println variant.name.capitalize()
     }
 }
-
+*/
 import com.android.build.gradle.internal.ndk.NdkHandler
+import com.android.build.gradle.internal.ndk.Stl;
 
 afterEvaluate {
     def filtered = ['class', 'active']
 
-    /*println "Android: " + android.properties
+    println android.properties
             .sort{it.key}
             .collect{it}
             .findAll{!filtered.contains(it.key)}
-            .join('\n')*/
+            .join(' \n')
 
-    println buildDir
-
+    //Internal Class of NDK, may change without notice
     def handler = new NdkHandler(project.getRootDir(),
             project.getExtensions().getByName("android").getCompileSdkVersion(),
             "gcc",
             "")
-    println "ABIS: "
     handler.getSupportedAbis().each { abi ->
-        println abi.name + handler.getCppCompiler(abi)
+        def toolchain = handler.getCCompiler(abi).absolutePath.replaceFirst( /(.*[\/\\]prebuilt[\/\\][^\/\\]+)[\/\\].*/, '$1' )
+        def taskName = "buildCjdns${abi.name}"
+        def CROSS = handler.getCCompiler(abi).absolutePath.replaceAll('gcc$','')
+        def TEMP = System.getProperty("java.io.tmpdir")
+        def systemIncludes = handler.getStlNativeToolSpecification(Stl.getById('system'), null, abi).getIncludes().collect({'-I'+it}).join(' ')
+        def CFLAGS = "--sysroot=" + handler.getSysroot(abi) + ' ' + systemIncludes
+        def LDFLAGS = ""
+        println 'cflags 2'
+        println CFLAGS
+
+        //Determining the paths in the ndk is not easy...
+        def tools = handler.getNdkDirectory().absolutePath + handler.getCCompiler(abi).absolutePath.replaceFirst( /.*([\/\\]prebuilt[\/\\][^\/\\]+[\/\\]).*/, '$1' ) + 'bin'
+        println tools
+
+        println  handler.getCCompiler(abi)
+        println  handler.getCCompiler(abi)
+        println  CFLAGS
+        println  CROSS
+        println TEMP
+        println handler.getAr(abi)
+        println  handler.getCCompiler(abi).absolutePath.replaceAll('gcc$','ranlib')
+        println  tools + System.getProperty("path.separator") + "${System.env.PATH}"
+
+
+//flags -gcc-toolchain /home/tsuckow/Android/Sdk/ndk-bundle/toolchains/x86_64-4.9/prebuilt/linux-x86_64 -target x86_64-none-linux-android -ffunction-sections -funwind-tables -fstack-protector-strong -fPIC -Wno-invalid-command-line-argument -Wno-unused-command-line-argument -no-canonical-prefixes  -g -fno-exceptions -fno-rtti -O0 -UNDEBUG -fno-limit-debug-info  -I/home/tsuckow/Android/Sdk/ndk-bundle/sources/cxx-stl/stlport/stlport -I/home/tsuckow/Android/Sdk/ndk-bundle/sources/cxx-stl//gabi++/include -I/home/tsuckow/Projects/hyperboria-android/src/main/jni     -DANDROID -DTARGET_ARCH_ABI=\"x86_64\" -D__ANDROID_API__=21 -Wa,--noexecstack -Wformat -Werror=format-security  -frtti  --sysroot /home/tsuckow/Android/Sdk/ndk-bundle/sysroot -isystem /home/tsuckow/Android/Sdk/ndk-bundle/sysroot/usr/include/x86_64-linux-android -c
+//LDflags  -gcc-toolchain /home/tsuckow/Android/Sdk/ndk-bundle/toolchains/x86_64-4.9/prebuilt/linux-x86_64 -target x86_64-none-linux-android -no-canonical-prefixes
+
+//LD_FLAGS appears to be missing
+        /*
+        task (taskName, type: NodeTask) {
+            script = file('cjdns-src/node_build/make.js')
+            execOverrides {
+                it.workingDir = 'cjdns-src'
+                it.environment << [
+                        CC: handler.getCCompiler(abi),
+                        GCC: handler.getCCompiler(abi),
+                        CFLAGS: CFLAGS,
+                        LDFLAGS: LDFLAGS,
+                        CROSS: CROSS,
+                        PLATFORM: "android",
+                        SYSTEM: "linux",
+                        CJDNS_BUILD_TMPDIR: TEMP,
+                        AR: handler.getAr(abi),
+                        RANLIB: handler.getCCompiler(abi).absolutePath.replaceAll('gcc$','ranlib'),
+                        PATH: tools + System.getProperty("path.separator") + "${System.env.PATH}"
+                ]
+            }
+        }
+        buildCjdns.dependsOn(taskName)
+*/
     }
 }
-
+/*
 afterEvaluate {
     android.applicationVariants.all { variant ->
         variant.outputs.each { output ->
             println "Output: " + output.getFilter(com.android.build.OutputFile.ABI)
 
-            /*def filtered = ['class', 'active']
+            def filtered = ['class', 'active']
 
             println output.properties
                     .sort{it.key}
                     .collect{it}
                     .findAll{!filtered.contains(it.key)}
-                    .join('\n')*/
+                    .join('\n')
 
             task ("my4CustomTaskConfig${variant.name.capitalize()}${output.getFilter(com.android.build.OutputFile.ABI)}") << {
                 println "^^ ASSEMBLE " + output.getFilter(com.android.build.OutputFile.ABI)
@@ -240,5 +315,4 @@ afterEvaluate {
         }
     }
 }
-
-
+*/
