@@ -34,17 +34,7 @@ def projectAbiFilters = ["armeabi","armeabi-v7a","arm64-v8a","x86","x86_64"]
 import org.ajoberstar.gradle.git.tasks.GitClone
 
 apply plugin: 'com.moowork.node'
-/*apply plugin: "com.jetbrains.python.envs"
 
-envs {
-    bootstrapDirectory = new File(buildDir, 'pythons')
-    envsDirectory = new File(buildDir, 'envs')
-    minicondaVersion = 'latest'
-    packages = ["pip", "setuptools"]
-
-    conda "python2", "2.7", [], true
-}
-*/
 node {
     // Version of node to use.
     version = '6.11.1'
@@ -72,15 +62,6 @@ task buildCjdns {
 
 }
 
-task copyNativeArtifacts {
-    copy {
-        from 'cjdns-src/build_android/out/'
-        //into 'src/main/assets/'
-        into buildDir.absolutePath + '/intermediates/assets/debug/'
-    }
-}
-
-apply plugin: CustomNDK
 apply plugin: 'com.android.application'
 apply plugin: 'checkstyle'
 
@@ -102,12 +83,7 @@ android {
             }
         }
     }
-/*
-    sourceSets.main {
-        jni.srcDirs = []
-        jniLibs.srcDir 'src/main/libs'
-    }
-*/
+
     signingConfigs {
         release
     }
@@ -149,10 +125,7 @@ afterEvaluate {
     }
 }
 
-//cloneCjdns.dependsOn('build_envs')
 cloneCjdns.finalizedBy(buildCjdns)
-//cloneCjdns.finalizedBy(nodeScript)
-buildCjdns.finalizedBy(copyNativeArtifacts)
 
 dependencies {
     compile "com.android.support:support-v4:$supportVersion"
@@ -188,16 +161,7 @@ if (project.hasProperty('storePassword')) {
     android.signingConfigs.release.storePassword = storePassword
 }
 
-class CustomNDK implements Plugin<Project> {
-    void apply(Project project) {
-        /*project.extensions.create("greeting", GreetingPluginExtension)
-        project.task('hello') {
-            doLast {
-                println "${project.greeting.message} from ${project.greeting.greeter}"
-            }
-        }*/
-    }
-}
+
 /*
 android.applicationVariants.all { variant ->
     task ("myCustomTaskConfig${variant.name.capitalize()}") {
@@ -215,6 +179,9 @@ import com.android.build.gradle.internal.ndk.Stl;
 
 afterEvaluate {
     def filtered = ['class', 'active']
+
+    println 'Build DIR: ' + buildDir.absolutePath
+
 /*
     println android.properties
             .sort{it.key}
@@ -228,7 +195,7 @@ afterEvaluate {
             "gcc",
             "")
 
-    android.ext
+    //android.ext
 
     println 'Available ABIs: ' + handler.getSupportedAbis().name.toString()
     def abis = handler.getSupportedAbis().findAll { it.name in projectAbiFilters };
@@ -241,32 +208,9 @@ afterEvaluate {
         def systemIncludes = handler.getStlNativeToolSpecification(Stl.getById('system'), null, abi).getIncludes().collect({'-I'+it}).join(' ')
         def CFLAGS = "--sysroot=" + handler.getSysroot(abi) + ' ' + systemIncludes
         def LDFLAGS = "--sysroot=" + handler.getSysroot(abi)
-        //println 'cflags 2'
-        //println CFLAGS
 
         //Determining the paths in the ndk is not easy...
         def tools = handler.getNdkDirectory().absolutePath + handler.getCCompiler(abi).absolutePath.replaceFirst( /.*([\/\\]prebuilt[\/\\][^\/\\]+[\/\\]).*/, '$1' ) + 'bin'
-        /*
-        println tools
-
-        println  handler.getCCompiler(abi)
-        println  handler.getCCompiler(abi)
-        println  CFLAGS
-        println  CROSS
-        println TEMP
-        println handler.getAr(abi)
-        println  handler.getCCompiler(abi).absolutePath.replaceAll('gcc$','ranlib')
-        println  tools + System.getProperty("path.separator") + "${System.env.PATH}"
-        */
-        //println "Name: " + abi.name
-
-
-//flags -gcc-toolchain /home/tsuckow/Android/Sdk/ndk-bundle/toolchains/x86_64-4.9/prebuilt/linux-x86_64 -target x86_64-none-linux-android -ffunction-sections -funwind-tables -fstack-protector-strong -fPIC -Wno-invalid-command-line-argument -Wno-unused-command-line-argument -no-canonical-prefixes  -g -fno-exceptions -fno-rtti -O0 -UNDEBUG -fno-limit-debug-info  -I/home/tsuckow/Android/Sdk/ndk-bundle/sources/cxx-stl/stlport/stlport -I/home/tsuckow/Android/Sdk/ndk-bundle/sources/cxx-stl//gabi++/include -I/home/tsuckow/Projects/hyperboria-android/src/main/jni     -DANDROID -DTARGET_ARCH_ABI=\"x86_64\" -D__ANDROID_API__=21 -Wa,--noexecstack -Wformat -Werror=format-security  -frtti  --sysroot /home/tsuckow/Android/Sdk/ndk-bundle/sysroot -isystem /home/tsuckow/Android/Sdk/ndk-bundle/sysroot/usr/include/x86_64-linux-android -c
-//LDflags  -gcc-toolchain /home/tsuckow/Android/Sdk/ndk-bundle/toolchains/x86_64-4.9/prebuilt/linux-x86_64 -target x86_64-none-linux-android -no-canonical-prefixes
-
-//LD_FLAGS appears to be missing
-
-        //2018-05-01 --sysroot not having effect on Build libuv...
 
         task (taskName, type: NodeTask) {
             script = file('make_cjdns.js')
@@ -276,9 +220,8 @@ afterEvaluate {
                         CC: handler.getCCompiler(abi),
                         GCC: handler.getCCompiler(abi),
                         CFLAGS: CFLAGS,
-                        //GCC_EXEC_PREFIX: handler.getSysroot(abi),
-                        LIBRARY_PATH: handler.getSysroot(abi),
-                        CPATH: handler.getSysroot(abi) + '/usr/include',
+                        LIBRARY_PATH: handler.getSysroot(abi), //For libuv
+                        CPATH: handler.getSysroot(abi) + '/usr/include', //For libuv
                         LDFLAGS: LDFLAGS,
                         CROSS: CROSS,
                         PLATFORM: "android",
@@ -292,49 +235,14 @@ afterEvaluate {
         }
         buildCjdns.dependsOn(taskName)
 
+        task ( taskName + '-COPY', type: Copy) {
+            from 'cjdns-src'
+            include 'cjdroute', 'cjdroute-init'
+            //into 'src/main/assets/'
+            into buildDir.absolutePath + "/intermediates/assets/debug/${abi.name}/"
+        }
+
+        tasks[taskName].finalizedBy(taskName + '-COPY')
+
     }
 }
-/*
-afterEvaluate {
-    android.applicationVariants.all { variant ->
-        variant.outputs.each { output ->
-            println "Output: " + output.getFilter(com.android.build.OutputFile.ABI)
-
-            def filtered = ['class', 'active']
-
-            println output.properties
-                    .sort{it.key}
-                    .collect{it}
-                    .findAll{!filtered.contains(it.key)}
-                    .join('\n')
-
-            task ("my4CustomTaskConfig${variant.name.capitalize()}${output.getFilter(com.android.build.OutputFile.ABI)}") << {
-                println "^^ ASSEMBLE " + output.getFilter(com.android.build.OutputFile.ABI)
-            }
-            output.assemble.finalizedBy("my4CustomTaskConfig${variant.name.capitalize()}${output.getFilter(com.android.build.OutputFile.ABI)}")
-        }
-
-        task ("my3CustomTaskConfig${variant.name.capitalize()}") << {
-            println "### CONFIG ***"
-            println variant.name.capitalize()
-            def filtered = ['class', 'active']
-
-            println variant.properties
-                    .sort{it.key}
-                    .collect{it}
-                    .findAll{!filtered.contains(it.key)}
-                    .join('\n')
-        }
-        variant.javaCompiler.dependsOn("my3CustomTaskConfig${variant.name.capitalize()}")
-
-        task ("my2CustomTaskConfig${variant.name.capitalize()}") {
-            println "%%% CONFIG ***"
-            println variant.name.capitalize()
-        }
-        task ("my2CustomTask${variant.name.capitalize()}") << {
-            println "%%% TEST ***"
-            println variant.name.capitalize()
-        }
-    }
-}
-*/
